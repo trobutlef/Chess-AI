@@ -1,18 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <meta charset="UTF-8"/>
     <title>Chess AI</title>
-    <link rel="stylesheet" type="text/css" href="static/css/chessboard-1.0.0.min.js">
+
+    <!-- CSS files -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.css')}}"/>
+
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.10.1/bootstrap-table.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.js"></script>
+
+
+    <!-- Javascript files -->
+    <script type = "text/javascript" src="{{ url_for('static', filename='js/chessboard-1.0.0.js')}}"></script>
+    <script type = "text/javascript" src="{{ url_for('static', filename='js/chessboard-1.0.0.min.js')}}"></script>
     
-    <script src="static/js/chessboard-1.0.0.min.js"></script>
 
 
   </head>
   <body>
+    <nav class="navbar navbar-default navbar-fixed-top">
+      <div class="container-fluid">
+          <h1 id="logo">ChessAI</h1>
+          <p>made by <a href="https://tonyastuhuaman.com/">Tony Astuhuaman</a></p>
+      </div>
+    </nav>
+    <hr>
     <div id="board1" style="width: 400px"></div>
   
     <br>
     <button>new game</button>
+
+
     <script type="text/javascript">
       var board1 = Chessboard('board1', 'start')
 
