@@ -6,7 +6,7 @@ class Engine():
    #constuctor
    def __init__(self, fen):
      self.board = chess.Board()
-      self.MAX_DEPTH = 60
+     self.MAX_DEPTH = 60
 
 
 
