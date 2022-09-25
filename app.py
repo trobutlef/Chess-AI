@@ -1,6 +1,6 @@
 #!usr/bin/env python3
 from flask import Flask, render_template
-import chess, chess.pgn
+import engine
 
 app = Flask(__name__)
 
