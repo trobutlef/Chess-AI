@@ -59,4 +59,6 @@
     8x8x4 - 4 = 260 bits
 
 ## Training Set
-  ---
+  1. AI (white) vs Stockfish (Black)
+  2. AI (white) vs AI (Black)
+  3. AI (white) vs Human (Black)
