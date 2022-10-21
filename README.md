@@ -1,10 +1,15 @@
 # Chess AI
-  Simple Chess Website built with flask, python-chess, chessboard.js
 
-  PUT IMAGE HERE...
+  <div style="text-align:center">
+  <img src="./static/img/chesspieces/wikipedia/bN.png"/>
+  </div>
 
 ## Paper
   Read my paper for my implemetation of this algorithm -> https://docs.google.com/document/d/1vdW18Gcsibg1j_nPxOuniDdTAz0CUVE7CLyWANVS7bQ/edit?usp=sharing
+
+
+## Overview
+  Simple Chess Website built with flask, python-chess, chessboard.js
 
 ## Features
   * 
