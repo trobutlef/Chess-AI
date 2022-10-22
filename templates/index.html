@@ -5,8 +5,10 @@
     <title>Chess AI</title>
 
     <!-- CSS files -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.css')}}"/>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='rook_favicon.ico') }}"/>
 
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
@@ -30,22 +32,30 @@
       </div>
     </nav>
     <hr>
-    <div id="board1" style="width: 400px"></div>
 
-    <div> 
-      <h3>Turn to move</h3>
-      <div id="table">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>White</th>
-              <th>Black</th>
-            </tr>
-          </thead>
-        </table>
+    <div id = "mainWindow">
+      <!--<div id="piecesB"></div>-->
+      <div id="board" style="width: 400px"></div>
+      <!--<div id="piecesW"></div>-->
+
+      <button id="startBtn">Start Position</button>
+      <button id="clearBtn">Clear Board</button>
+
+      <div id="stats"> 
+        <h3>Turn to move</h3>
+        <div id="table">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>White</th>
+                <th>Black</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+
       </div>
-
     </div>
   
     <br>
@@ -54,8 +64,20 @@
 
 
     <script type="text/javascript">
-      var board1 = Chessboard('board1', 'start')
-
+      function pieceTheme(piece){
+        if(piece.search(/w/) !== -1){
+          return 'static/img/chesspieces/wikipedia/' + piece + '.png'
+        }
+        return 'static/img/chesspieces/wikipedia/' + piece + '.png'
+      }
+      var config = {
+        pieceTheme: pieceTheme,
+        draggable: true
+      }
+      var board1 = Chessboard('board', config)
+      
+      $('#startBtn').on('click', board1.start)
+      $('#clearBtn').on('click', board1.clear)
     </script>
   </body>
 </html>
