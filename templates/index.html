@@ -65,9 +65,11 @@
 
     <script type="text/javascript">
       function pieceTheme(piece){
+        //white pieces
         if(piece.search(/w/) !== -1){
           return 'static/img/chesspieces/wikipedia/' + piece + '.png'
         }
+        //black pieces
         return 'static/img/chesspieces/wikipedia/' + piece + '.png'
       }
       var config = {
