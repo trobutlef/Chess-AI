@@ -2,22 +2,22 @@
 
   <div style="text-align:center">
   <img src="./static/img/chesspieces/wikipedia/bN.png"/>
+   
   </div>
+
+  <a href="https://chess-ai-tony.herokuapp.com"> deployed by Heroku, Click here </a>
 
 ## Paper
   Read my paper for my implemetation of this algorithm -> https://docs.google.com/document/d/1vdW18Gcsibg1j_nPxOuniDdTAz0CUVE7CLyWANVS7bQ/edit?usp=sharing
 
 
 ## Overview
-  Simple Chess Website built with flask, python-chess, chessboard.js
-
-## Features
-  * 
+  Simple Chess Website built with flask, python-chess, chessboard.js, JQueryjs
 
 ## Usage
   * Option #1
-    * Use it on our website:
-      PUT LINK HERE...
+    * Use it on my website:
+      https://chess-ai-tony.herokuapp.com
   * Option #2 - Run it on the localhost
     * Clone Repository
     ```bash
@@ -34,7 +34,8 @@
 
 ## TODOs
   - [ ] Add table UI with CSS
-  - [ ] Solve problem with chessboard.js to display board on website
+  - [ ] Fix Legal moves UI
+  - [X] Solve problem with chessboard.js to display board on website
   - [ ] Allow user to get new game server
   - [ ] Allow user to take back one move
   - [ ] Make model with Tensorflow and train with Stockfish training data 
