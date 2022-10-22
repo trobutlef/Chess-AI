@@ -1,3 +1,14 @@
 body{
-  text-align: center;
+  /*text-align: center;*/
+  padding-left: 5%;
+}
+
+#stats{
+  padding-left: 50%;
+}
+
+#board{
+  width: 400px;
+  padding-left: 5%;
+  float: left;
 }
