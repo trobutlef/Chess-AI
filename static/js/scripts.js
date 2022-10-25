@@ -24,4 +24,3 @@ var onDrop = function(source, target) {
   //updateStatus();
   //getResponseMove();
 };
-
