@@ -1,47 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8"/>
+    <meta charset="UTF-8" />
     <title>Chess AI</title>
 
     <!-- CSS files -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css')}}"/>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"/>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.css')}}"/>
-    <link rel="shortcut icon" href="{{ url_for('static', filename='rook_favicon.ico') }}"/>
-
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css')}}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/chessboard-1.0.0.css')}}"
+    />
+    <link
+      rel="shortcut icon"
+      href="{{ url_for('static', filename='rook_favicon.ico') }}"
+    />
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.10.1/bootstrap-table.min.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.js"></script>
 
-
     <!-- Javascript files -->
-    <script type = "text/javascript" src="{{ url_for('static', filename='js/chessboard-1.0.0.js')}}"></script>
-    <script type = "text/javascript" src="{{ url_for('static', filename='js/chessboard-1.0.0.min.js')}}"></script>
-    
-
-
+    <script
+      type="text/javascript"
+      src="{{ url_for('static', filename='js/chessboard-1.0.0.js')}}"
+    ></script>
+    <script
+      type="text/javascript"
+      src="{{ url_for('static', filename='js/chessboard-1.0.0.min.js')}}"
+    ></script>
   </head>
   <body>
     <nav class="navbar navbar-default navbar-fixed-top">
       <div class="container-fluid">
-          <h1 id="logo">ChessAI</h1>
-          <a href="https://github.com/trobutlef/Chess-AI"><img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" style="width: 20px"/></a>
-          <br>
-          <p>made by <a href="https://tonyastuhuaman.com/">Tony Astuhuaman</a></p>
+        <h1 id="logo">ChessAI</h1>
+        <a href="https://github.com/trobutlef/Chess-AI"
+          ><img
+            src="https://cdn-icons-png.flaticon.com/512/25/25231.png"
+            style="width: 20px"
+        /></a>
+        <br />
+        <p>made by <a href="https://tonyastuhuaman.com/">Tony Astuhuaman</a></p>
       </div>
     </nav>
-    <hr>
+    <hr />
 
+    <a href="/selfplay">Play vs itself</a>
+    <button onclick="newGame()">Play vs AI</button><br />
+    <div id="board" style="width: 600 px"></div>
+    <p></p>
+    <!--
     <div id = "mainWindow">
-      <!--<div id="piecesB"></div>-->
-      <div id="board"></div>
-      <!--<div id="piecesW"></div>-->
 
-      <!--<button id="startBtn">Start Position</button>
-      <button id="clearBtn">Clear Board</button>-->
+      <div id="board"></div>
+
 
       <div id="stats"> 
         <h3>Turn to move</h3>
@@ -62,29 +81,36 @@
         </div>
 
       </div>
-    </div>
-  
-  
-
+    </div>-->
 
     <script type="text/javascript">
-      function pieceTheme(piece){
+      function pieceTheme(piece) {
         //white pieces
-        if(piece.search(/w/) !== -1){
-          return 'static/img/chesspieces/wikipedia/' + piece + '.png'
+        if (piece.search(/w/) !== -1) {
+          return "static/img/chesspieces/wikipedia/" + piece + ".png";
         }
         //black pieces
-        return 'static/img/chesspieces/wikipedia/' + piece + '.png'
+        return "static/img/chesspieces/wikipedia/" + piece + ".png";
       }
       var config = {
-        pieceTheme: pieceTheme,
-        draggable: true
+        //pieceTheme: pieceTheme,
+        position: "start",
+        draggable: true,
+        onDrop: onDrop,
+      };
+
+      var board = Chessboard("board", config);
+
+      function newGame() {
+        $.get("/newgame", function (r) {
+          document.querySelector("p").innerText = "";
+          board.position(r);
+        });
       }
-      var board1 = Chessboard('board', config)
-      
-      $('#startBtn').on('click', board1.start)
+
+      // $("#startBtn").on("click", board1.start);
       //$('#backBtn').on('click', board1.clear)
-      $('#clearBtn').on('click', board1.clear)
+      //$("#clearBtn").on("click", board1.clear);
     </script>
   </body>
 </html>
