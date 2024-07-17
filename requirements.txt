@@ -10,3 +10,6 @@ numpy==1.23.4
 python-chess==1.999
 Werkzeug==2.2.2
 zipp==3.8.1
+torch
+flask_cors
+flask_sqlalchemy
