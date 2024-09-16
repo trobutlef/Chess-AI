@@ -1,0 +1,19 @@
+/* frontend/styles.css */
+body {
+  font-family: Arial, sans-serif;
+  padding: 20px;
+}
+
+h1 {
+  color: #333;
+}
+
+button {
+  padding: 10px 20px;
+  margin: 5px;
+}
+
+#status {
+  margin-top: 10px;
+  font-weight: bold;
+}
