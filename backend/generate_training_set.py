@@ -6,8 +6,8 @@ import numpy as np
 
 def serialize_board(board):
     """
-    A simple serialization function that converts the board to a flat array of 64 integers.
-    Uses the following scheme:
+    Converts the board to a flat array of 64 integers.
+    Mapping:
       - Empty square: 0
       - White pieces: Pawn=1, Knight=2, Bishop=3, Rook=4, Queen=5, King=6
       - Black pieces: Pawn=-1, Knight=-2, Bishop=-3, Rook=-4, Queen=-5, King=-6
@@ -24,17 +24,13 @@ def serialize_board(board):
     board_array = []
     for square in chess.SQUARES:
         piece = board.piece_at(square)
-        if piece is None:
-            board_array.append(0)
-        else:
-            board_array.append(mapping[(piece.piece_type, piece.color)])
+        board_array.append(mapping[piece] if piece is not None else 0)
     return np.array(board_array, dtype=np.int8)
 
 def get_dataset(num_samples=None):
     """
-    Iterate over all PGN files in the data folder and generate training examples.
-    For each game, each position after a move is serialized.
-    The label is defined by the game result:
+    Iterates over all PGN files in the data folder to generate training examples.
+    For each game, after each move the board is serialized. The label is determined by the game result:
       - '1-0'  --> +1 (win for White)
       - '0-1'  --> -1 (win for Black)
       - '1/2-1/2' --> 0 (draw)
@@ -48,7 +44,6 @@ def get_dataset(num_samples=None):
         if not fn.endswith(".pgn"):
             continue
         path = os.path.join(data_folder, fn)
-        # Use errors="replace" to handle decoding issues.
         with open(path, encoding="utf-8", errors="replace") as pgn_file:
             while True:
                 game = chess.pgn.read_game(pgn_file)
@@ -59,7 +54,6 @@ def get_dataset(num_samples=None):
                     continue
                 label = result_values[result]
                 board = game.board()
-                # Record board positions after each move.
                 for move in game.mainline_moves():
                     board.push(move)
                     serialized = serialize_board(board)
@@ -68,12 +62,8 @@ def get_dataset(num_samples=None):
                 print(f"Parsed game {game_count}: total samples so far = {len(X)}")
                 game_count += 1
                 if num_samples is not None and len(X) >= num_samples:
-                    X = np.array(X)
-                    Y = np.array(Y)
-                    return X, Y
-    X = np.array(X)
-    Y = np.array(Y)
-    return X, Y
+                    return np.array(X), np.array(Y)
+    return np.array(X), np.array(Y)
 
 if __name__ == "__main__":
     # For example, generate up to 25 million samples (or fewer if not available)
