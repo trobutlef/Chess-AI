@@ -5,3 +5,5 @@ Flask-SQLAlchemy==2.5.1
 Flask-Bcrypt==1.0.1
 python-chess==1.999
 SQLAlchemy<2.0
+torch
+numpy

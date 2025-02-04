@@ -1,4 +1,4 @@
-# backend/chess_engine.py
+# chess_engine.py
 import math
 import chess
 
@@ -12,7 +12,7 @@ def evaluate_board(board):
         chess.BISHOP: 3,
         chess.ROOK: 5,
         chess.QUEEN: 9,
-        chess.KING: 0  # King's value is not used here
+        chess.KING: 0  # King's value is not used here.
     }
     value = 0
     for piece in board.piece_map().values():
@@ -51,7 +51,8 @@ def minimax_alpha_beta(board, depth, alpha, beta, is_maximizing):
 
 def find_best_move(board, depth):
     """
-    Iterates over legal moves and returns the best move (in UCI format).
+    Iterates over legal moves and returns the best move (in UCI format)
+    based on minimax search with alpha–beta pruning.
     """
     best_move = None
     best_value = -math.inf if board.turn == chess.WHITE else math.inf

@@ -1,15 +1,16 @@
-# backend/app.py
+# app.py
 import os
 import chess
+import torch
 from flask import Flask, redirect, url_for, session, request, jsonify
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 
-# Import our engine and opening book modules
+# Import our search engine and neural network modules
 from chess_engine import find_best_move
-from opening_book import load_opening_book, get_trained_move
+from neural_model import load_model, serialize_board
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -36,6 +37,12 @@ google_bp = make_google_blueprint(
     redirect_to="google_login"
 )
 app.register_blueprint(google_bp, url_prefix="/login")
+
+# ------------------ Global Neural Model Loading ---------------------
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Load the pre-trained neural network model.
+# (Ensure that you have already trained the network and saved the weights to nets/value.pth.)
+neural_model = load_model("nets/value.pth", device=device)
 
 # ------------------ API Endpoints ---------------------
 @app.route("/")
@@ -112,6 +119,15 @@ def login():
 
 @app.route("/api/chess/move", methods=["POST"])
 def chess_move():
+    """
+    Expects JSON data:
+    {
+      "fen": "<FEN string>",
+      "depth": <int, optional>,  # for minimax search
+      "engine": "minimax" or "neural"
+    }
+    Returns the best move in UCI notation.
+    """
     data = request.get_json()
     fen = data.get("fen")
     depth = data.get("depth", 3)
@@ -122,11 +138,32 @@ def chess_move():
     except Exception as e:
         return jsonify({"error": "Invalid FEN"}), 400
 
-    if engine == "trained":
-        move = get_trained_move(board)
-        if move is None:
-            move = find_best_move(board, depth)
+    if engine == "neural":
+        # Use the neural network to select a move via a one-ply search.
+        best_move = None
+        best_eval = None
+        # Determine which side is moving.
+        moving_side = board.turn  # True for White, False for Black
+        for move in board.legal_moves:
+            board.push(move)
+            # Serialize the board to a flat array and reshape to (1, 1, 8, 8).
+            board_array = serialize_board(board)
+            board_tensor = torch.tensor(board_array, dtype=torch.float32).view(1, 1, 8, 8).to(device)
+            with torch.no_grad():
+                value = neural_model(board_tensor).item()
+            board.pop()
+            # For White, we choose the move with the highest evaluation; for Black, the lowest.
+            if moving_side == chess.WHITE:
+                if best_eval is None or value > best_eval:
+                    best_eval = value
+                    best_move = move
+            else:
+                if best_eval is None or value < best_eval:
+                    best_eval = value
+                    best_move = move
+        move = best_move
     else:
+        # Use the minimax with alpha–beta pruning search.
         move = find_best_move(board, depth)
 
     if move:
@@ -137,5 +174,4 @@ def chess_move():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        load_opening_book(data_folder="data", max_moves=10)
     app.run(debug=True)
