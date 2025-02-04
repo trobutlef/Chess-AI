@@ -1,163 +1,141 @@
 # backend/app.py
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import chess
-import numpy as np
-import pickle
 import os
-from tensorflow.keras.models import load_model
-import firebase_admin
-from firebase_admin import credentials, auth
+import chess
+from flask import Flask, redirect, url_for, session, request, jsonify
+from flask_dance.contrib.google import make_google_blueprint, google
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from flask_bcrypt import Bcrypt
 
+# Import our engine and opening book modules
+from chess_engine import find_best_move
+from opening_book import load_opening_book, get_trained_move
+
+# Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS to allow requests from the frontend
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersekrit")
+CORS(app, supports_credentials=True)
 
-# Secret key for session management (if needed)
-app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key')
+# Configure SQLAlchemy (using SQLite for simplicity)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
+db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate('path/to/serviceAccountKey.json')  # Update with the correct path
-firebase_admin.initialize_app(cred)
+# ------------------ User Model ---------------------
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True)
+    name = db.Column(db.String(150))
+    password = db.Column(db.String(255), nullable=True)  # For email/password users; null for OAuth
 
-# Load the trained model
-model = load_model('model/chess_model.h5')
+# ------------------ Google OAuth Setup ---------------------
+app.config["GOOGLE_OAUTH_CLIENT_ID"] = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
+app.config["GOOGLE_OAUTH_CLIENT_SECRET"] = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
+google_bp = make_google_blueprint(
+    scope=["profile", "email"],
+    redirect_to="google_login"
+)
+app.register_blueprint(google_bp, url_prefix="/login")
 
-# Load the move labels dictionary
-with open('model/move_labels_dict.pkl', 'rb') as f:
-    move_labels_dict = pickle.load(f)
+# ------------------ API Endpoints ---------------------
+@app.route("/")
+def index():
+    return "Welcome to Chess AI API"
 
-# Create reverse mapping from label to move SAN
-label_to_move = {v: k for k, v in move_labels_dict.items()}
+@app.route("/login/google")
+def google_login():
+    if not google.authorized:
+        return redirect(url_for("google.login"))
+    resp = google.get("/oauth2/v2/userinfo")
+    if resp.ok:
+        user_info = resp.json()
+        email = user_info["email"]
+        name = user_info.get("name", email)
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User(email=email, name=name)
+            db.session.add(user)
+            db.session.commit()
+        session["user_id"] = user.id
+        return redirect("http://localhost:3000/")
+    return "Failed to fetch user info", 400
 
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-
-    # Firebase Authentication REST API
-    try:
-        import requests
-        api_key = os.environ.get('FIREBASE_API_KEY', 'your_firebase_api_key')
-        auth_url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}'
-        payload = {
-            'email': email,
-            'password': password,
-            'returnSecureToken': True
-        }
-        r = requests.post(auth_url, data=payload)
-        if r.status_code == 200:
-            user_info = r.json()
-            id_token = user_info['idToken']
-            return jsonify({'idToken': id_token}), 200
-        else:
-            return jsonify({'error': r.json()['error']['message']}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/register', methods=['POST'])
+@app.route("/api/register", methods=["POST"])
 def register():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
+    data = request.get_json()
+    app.logger.info("Registration data: %s", data)
+    if not data:
+        return jsonify({"error": "No input data provided"}), 400
+
+    email = data.get("email")
+    password = data.get("password")
+    name = data.get("name", email)
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "User already exists"}), 400
 
     try:
-        user = auth.create_user(email=email, password=password)
-        return jsonify({'message': 'User created successfully.'}), 200
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+        user = User(email=email, name=name, password=hashed_password)
+        db.session.add(user)
+        db.session.commit()
+        app.logger.info("User %s registered successfully.", email)
+        return jsonify({"message": "User registered successfully"})
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        app.logger.error("Registration error: %s", e)
+        return jsonify({"error": "Registration failed"}), 500
 
-@app.route('/api/new_game', methods=['GET'])
-def new_game():
-    board = chess.Board()
-    fen = board.fen()
-    return jsonify({'fen': fen})
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    app.logger.info("Login data: %s", data)
+    if not data:
+        return jsonify({"error": "No input data provided"}), 400
 
-@app.route('/api/make_move', methods=['POST'])
-def make_move():
-    data = request.json
-    fen = data.get('fen')
-    move_uci = data.get('move')
+    email = data.get("email")
+    password = data.get("password")
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
 
-    board = chess.Board(fen)
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.password:
+        return jsonify({"error": "User not found or password not set"}), 400
 
-    # Human move
-    try:
-        move = chess.Move.from_uci(move_uci)
-        if move in board.legal_moves:
-            board.push(move)
-        else:
-            return jsonify({'error': 'Invalid move'}), 400
-    except ValueError:
-        return jsonify({'error': 'Invalid move format'}), 400
-
-    # AI move
-    if not board.is_game_over():
-        ai_move = get_ai_move(board)
-        board.push(ai_move)
-        ai_move_san = ai_move.uci()
+    if bcrypt.check_password_hash(user.password, password):
+        session["user_id"] = user.id
+        app.logger.info("User %s logged in successfully.", email)
+        return jsonify({"message": "Logged in successfully"})
     else:
-        ai_move_san = None
+        return jsonify({"error": "Invalid credentials"}), 400
 
-    new_fen = board.fen()
-    game_over = board.is_game_over()
-    result = board.result() if game_over else None
+@app.route("/api/chess/move", methods=["POST"])
+def chess_move():
+    data = request.get_json()
+    fen = data.get("fen")
+    depth = data.get("depth", 3)
+    engine = data.get("engine", "minimax")
+    
+    try:
+        board = chess.Board(fen)
+    except Exception as e:
+        return jsonify({"error": "Invalid FEN"}), 400
 
-    return jsonify({
-        'fen': new_fen,
-        'ai_move': ai_move_san,
-        'game_over': game_over,
-        'result': result
-    })
+    if engine == "trained":
+        move = get_trained_move(board)
+        if move is None:
+            move = find_best_move(board, depth)
+    else:
+        move = find_best_move(board, depth)
 
-def get_ai_move(board):
-    input_tensor = board_to_tensor(board)
-    input_tensor = np.expand_dims(input_tensor, axis=0)
-    move_probs = model.predict(input_tensor)[0]
+    if move:
+        return jsonify({"move": move.uci()})
+    else:
+        return jsonify({"move": None, "error": "No valid move found"})
 
-    legal_moves = list(board.legal_moves)
-    legal_move_indices = []
-    for move in legal_moves:
-        move_san = move.uci()
-        move_index = move_labels_dict.get(move_san)
-        if move_index is not None:
-            legal_move_indices.append((move_index, move))
-
-    if not legal_move_indices:
-        return random.choice(legal_moves)
-
-    # Get probabilities for legal moves
-    legal_move_probs = [(move_probs[index], move) for index, move in legal_move_indices]
-
-    # Choose the move with the highest probability
-    best_move = max(legal_move_probs, key=lambda x: x[0])[1]
-
-    return best_move
-
-def board_to_tensor(board):
-    tensor = np.zeros((8, 8, 12), dtype=np.int8)
-    piece_to_index = {
-        chess.Piece(chess.PAWN, chess.WHITE): 0,
-        chess.Piece(chess.KNIGHT, chess.WHITE): 1,
-        chess.Piece(chess.BISHOP, chess.WHITE): 2,
-        chess.Piece(chess.ROOK, chess.WHITE): 3,
-        chess.Piece(chess.QUEEN, chess.WHITE): 4,
-        chess.Piece(chess.KING, chess.WHITE): 5,
-        chess.Piece(chess.PAWN, chess.BLACK): 6,
-        chess.Piece(chess.KNIGHT, chess.BLACK): 7,
-        chess.Piece(chess.BISHOP, chess.BLACK): 8,
-        chess.Piece(chess.ROOK, chess.BLACK): 9,
-        chess.Piece(chess.QUEEN, chess.BLACK): 10,
-        chess.Piece(chess.KING, chess.BLACK): 11,
-    }
-    for square in chess.SQUARES:
-        piece = board.piece_at(square)
-        if piece:
-            piece_index = piece_to_index[piece]
-            row = 7 - chess.square_rank(square)
-            col = chess.square_file(square)
-            tensor[row, col, piece_index] = 1
-    return tensor
-
-if __name__ == '__main__':
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+        load_opening_book(data_folder="data", max_moves=10)
     app.run(debug=True)
