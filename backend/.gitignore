@@ -2,14 +2,15 @@
 *.pyc
 __pycache__/
 .DS_Store
-.ipynb_checkpoints/
+#.ipynb_checkpoints/
+
 venv/
-env/
+
 
 .env
 
 #data and processed files
-backend/data/
+data/
 processed/
 
 
