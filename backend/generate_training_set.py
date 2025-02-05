@@ -21,11 +21,13 @@ def serialize_board(board):
         (chess.QUEEN, True): 5,  (chess.QUEEN, False): -5,
         (chess.KING, True): 6,   (chess.KING, False): -6,
     })
+    
     board_array = []
     for square in chess.SQUARES:
         piece = board.piece_at(square)
-        board_array.append(mapping[piece] if piece is not None else 0)
+        board_array.append(mapping[(piece.piece_type, piece.color)] if piece is not None else 0)
     return np.array(board_array, dtype=np.int8)
+
 
 def get_dataset(num_samples=None):
     """

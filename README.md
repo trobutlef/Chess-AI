@@ -1,84 +1,193 @@
-# Chess AI
+# Chess AI Backend
 
-  <div style="text-align:center">
-  <img src="./static/img/chesspieces/wikipedia/bN.png"/>
-   
-  </div>
+This project implements a Chess AI that allows users to choose between two evaluation engines:
 
-<a href="https://chess-ai-tony.herokuapp.com"> deployed by Heroku, Click here </a>
+- **Minimax with Alpha-Beta Pruning** for classic search-based move selection.
+- **Neural Network Model** trained on PGN files for position evaluation.
 
-## Paper
+The backend is powered by **Flask**, and the AI models are built using **PyTorch**.
 
-Read my paper for my implemetation of this algorithm -> https://docs.google.com/document/d/1vdW18Gcsibg1j_nPxOuniDdTAz0CUVE7CLyWANVS7bQ/edit?usp=sharing
+---
 
-## Overview
+## Project Structure
 
-Simple Chess Website built with flask, python-chess, chessboard.js, JQueryjs
+```
+backend/
+├── app.py                    # Flask API for user interaction
+├── chess_engine.py           # Minimax algorithm with alpha-beta pruning
+├── neural_model.py           # Neural network architecture and utilities
+├── generate_training_set.py  # Generates training data from PGN files
+├── train_model.py            # Trains the neural network
+├── data/                     # Folder for PGN files (not tracked in Git)
+├── processed/                # Processed datasets (not tracked in Git)
+├── nets/                     # Trained models (e.g., value.pth)
+├── requirements.txt          # Python dependencies
+└── .env                      # Environment variables (not tracked in Git)
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.8+
+- Pip
+- [Git](https://git-scm.com/)
+
+### Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/your-username/Chess-AI.git
+cd Chess-AI/backend
+```
+
+Create and activate a virtual environment:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Environment Setup
+
+Create a `.env` file to store sensitive information:
+
+```ini
+FLASK_SECRET_KEY=your_secret_key
+GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
+```
+
+Ensure `.env` is ignored by Git:
+
+```bash
+echo ".env" >> .gitignore
+```
+
+---
 
 ## Usage
 
-- Option #1
-  - Use it on my website:
-    https://chess-ai-tony.herokuapp.com
-- Option #2 - Run it on the localhost
-  - Clone Repository
-  ```bash
-  pip3 install python-chess tensorflow flask
-  # then ...
-  python3 app.py #running on port 4000
-  ```
-  - Install requirements.
-  ```bash
-  python3 -m pip install -r requirements.txt
-  ```
+### Generate the Dataset
 
-## TODOs
+Place your PGN files inside the `data/` folder.
 
-- [ ] Add table UI with CSS
-- [ ] Fix Legal moves UI
-- [x] Solve problem with chessboard.js to display board on website
-- [ ] Allow user to get new game server
-- [ ] Allow user to take back one move
-- [ ] Make model with Tensorflow and train with Stockfish training data
+Run the following script to process the PGN files:
 
-## Implementation
+```bash
+python generate_training_set.py
+```
 
-- Establish the search tree
-- Use a neural net to prune the search tree
+The dataset will be saved in the `processed/` folder.
 
-Definition : Value network
-V - f(state)
+---
 
-State(Board):
+### Train the Model
 
-Pieces(1-6 _ 2 - 13):
-_ Blank
-_ Pawn
-_ Bishop
-_ Knight
-_ Rook
-_ Queen
-_ King
+Train the neural network using:
 
-Extra state:
-_ Castle available x2
-_ En passant available x2
+```bash
+python train_model.py
+```
 
-    8x8x4 - 4 = 260 bits
+The trained model will be saved in the `nets/` folder as `value.pth`.
 
-## Algorithms
+---
 
-### Minimax Algorithm
+### Run the API
 
-### Alpha-Beta Pruning
+Start the Flask API:
 
-## Training Set
+```bash
+python app.py
+```
 
-1. AI (white) vs Stockfish (Black)
-2. AI (white) vs AI (Black)
-3. AI (white) vs Human (Black)
+The API will be available at `http://localhost:5000/`.
 
-## Steps to make a chess AI
+---
 
-1. Gather data: The AI needs to learn about the rules of chess and the possible moves that can be made.
-2. Some algorithms: MINIMAX, Alpha-beta pruning, Monte Carlo Tree Search.
+## API Endpoints
+
+### `POST /api/chess/move`
+
+**Request:**
+
+```json
+{
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "depth": 3,
+  "engine": "neural" // or "minimax"
+}
+```
+
+**Response:**
+
+```json
+{
+  "move": "e2e4"
+}
+```
+
+---
+
+## Authentication
+
+Google OAuth is integrated for user authentication. Make sure to set the `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in your `.env` file.
+
+---
+
+## GitHub Large File Handling
+
+To prevent large files from being pushed to GitHub:
+
+1. Add directories to `.gitignore`:
+
+```
+# Ignore data, models, and environments
+data/
+processed/
+nets/
+venv/
+.env
+```
+
+2. If large files were already committed:
+
+```bash
+git rm --cached path/to/largefile
+git commit -m "Remove large file"
+git push
+```
+
+For files >100 MB, consider using [Git LFS](https://git-lfs.github.com/).
+
+---
+
+## Tech Stack
+
+- **Flask** - Web Framework
+- **PyTorch** - Neural Network Library
+- **python-chess** - Chess Engine Integration
+- **SQLAlchemy** - Database ORM
+- **OAuth with Google** - User Authentication
+
+---
+
+## Acknowledgments
+
+Inspired by classic chess engines and modern AI-based approaches like AlphaZero.
+
+---
+
+## TODO
+
+- Host the application on a free platform that supports Flask and SQLite for user registration and authentication. Potential options include **Render**, **Vercel**, or **Railway**.
