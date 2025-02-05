@@ -8,7 +8,7 @@ venv/
 
 
 .env
-
+*.pgn
 #data and processed files
 data/
 processed/
