@@ -40,7 +40,7 @@ backend/
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-username/Chess-AI.git
+git clone https://github.com/trobutlef/Chess-AI.git
 cd Chess-AI/backend
 ```
 

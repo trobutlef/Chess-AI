@@ -16,7 +16,6 @@ function LoginPage({ onLogin }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [isRegister, setIsRegister] = useState(false);
 
-  // Handle form submission (for email/password login or sign-up)
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -24,12 +23,9 @@ function LoginPage({ onLogin }) {
       return;
     }
     setErrorMsg("");
-    // Here, you'd normally call your backend API for login or registration.
-    // For demonstration purposes, we simulate a successful login.
     onLogin({ email, name: email.split("@")[0] });
   };
 
-  // Redirect to the backend's Google OAuth endpoint.
   const handleGoogleAuth = () => {
     window.location.href = "http://localhost:5000/login/google";
   };
@@ -54,7 +50,6 @@ function LoginPage({ onLogin }) {
           textAlign: "center",
         }}
       >
-        {/* Logo */}
         <Box sx={{ mb: 2 }}>
           <img
             src="/logo_1.png"
@@ -63,19 +58,16 @@ function LoginPage({ onLogin }) {
           />
         </Box>
 
-        {/* Title */}
         <Typography variant="h4" sx={{ mb: 2 }}>
           Welcome back
         </Typography>
 
-        {/* Error Message */}
         {errorMsg && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {errorMsg}
           </Alert>
         )}
 
-        {/* Login/Sign-Up Form */}
         <form onSubmit={handleSubmit}>
           <TextField
             label="Email"
@@ -99,7 +91,6 @@ function LoginPage({ onLogin }) {
           </Button>
         </form>
 
-        {/* Toggle between Login and Sign Up */}
         <Typography variant="body2" sx={{ mt: 2 }}>
           {isRegister ? "Already have an account? " : "Don't have an account? "}
           <Link
@@ -113,17 +104,35 @@ function LoginPage({ onLogin }) {
           </Link>
         </Typography>
 
-        {/* Divider with "OR" */}
         <Divider sx={{ my: 3 }}>OR</Divider>
 
-        {/* Google Auth Button */}
         <Button
-          variant="outlined"
-          startIcon={<GoogleIcon />}
           onClick={handleGoogleAuth}
           fullWidth
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#FFFFFF",
+            color: "#5F6368",
+            border: "1px solid #DADCE0",
+            borderRadius: "4px",
+            padding: "10px 0",
+            textTransform: "none",
+            fontWeight: 500,
+            fontSize: "14px",
+            "&:hover": {
+              backgroundColor: "#F7F8F8",
+              borderColor: "#DADCE0",
+            },
+          }}
         >
-          Continue with Google
+          <img
+            src="https://developers.google.com/identity/images/g-logo.png"
+            alt="Google Logo"
+            style={{ width: "20px", marginRight: "10px" }}
+          />
+          Sign in with Google
         </Button>
       </Box>
     </Box>
