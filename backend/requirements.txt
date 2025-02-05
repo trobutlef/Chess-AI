@@ -7,3 +7,4 @@ python-chess==1.999
 SQLAlchemy<2.0
 torch
 numpy
+python-dotenv

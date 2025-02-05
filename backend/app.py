@@ -1,4 +1,7 @@
 # app.py
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import chess
 import torch
@@ -30,7 +33,9 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=True)  # For email/password users; null for OAuth
 
 # ------------------ Google OAuth Setup ---------------------
+#print(os.environ.get("GOOGLE_OAUTH_CLIENT_ID"))
 app.config["GOOGLE_OAUTH_CLIENT_ID"] = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
+#print(os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
 app.config["GOOGLE_OAUTH_CLIENT_SECRET"] = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
 google_bp = make_google_blueprint(
     scope=["profile", "email"],
