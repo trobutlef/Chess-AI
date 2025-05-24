@@ -5,6 +5,8 @@ This repository implements a Chess AI backend with two engines:
 - **Minimax**: search-based engine with alpha-beta pruning and quiescence search.
 - **Neural**: evaluation using a trained convolutional neural network.
 
+![Chess AI Screenshot](image.png)
+
 ## Repository Structure
 
 ```
