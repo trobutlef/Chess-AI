@@ -1,182 +1,220 @@
-# app.py
 from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import time
+import logging
+
 import chess
+import numpy as np
 import torch
-from flask import Flask, redirect, url_for, session, request, jsonify
-from flask_dance.contrib.google import make_google_blueprint, google
-from flask_cors import CORS
+from flask import (
+    Flask, redirect, url_for,
+    session, request, jsonify
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
+from flask_cors import CORS
+from flask_migrate import Migrate
+from flask_dance.contrib.google import make_google_blueprint, google
 
-# Import our search engine and neural network modules
 from chess_engine import find_best_move
 from neural_model import load_model, serialize_board
 
-# Initialize Flask app
+# --------------------
+# App & Config
+# --------------------
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersekrit")
-CORS(app, supports_credentials=True)
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "supersekrit")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
+    "DATABASE_URL", "sqlite:///db.sqlite3"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Configure SQLAlchemy (using SQLite for simplicity)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
+# Set up SERVER_NAME so OAuth redirect URIs line up (host:port)
+PORT = int(os.getenv("PORT", 5001))
+app.config["SERVER_NAME"] = f"localhost:{PORT}"
 
-# ------------------ User Model ---------------------
+# CORS
+if os.getenv("FLASK_ENV") == "production":
+    origins = os.getenv("CORS_ORIGINS", "").split(",")
+    CORS(app, supports_credentials=True,
+         resources={r"/api/*": {"origins": origins}})
+else:
+    CORS(app, supports_credentials=True)
+
+# --------------------
+# Logging
+# --------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --------------------
+# Database + Migrations
+# --------------------
+db      = SQLAlchemy(app)
+bcrypt  = Bcrypt(app)
+migrate = Migrate(app, db)
+
+# --------------------
+# Models
+# --------------------
 class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(150), unique=True)
-    name = db.Column(db.String(150))
-    password = db.Column(db.String(255), nullable=True)  # For email/password users; null for OAuth
+    id       = db.Column(db.Integer, primary_key=True)
+    email    = db.Column(db.String(150), unique=True)
+    name     = db.Column(db.String(150))
+    password = db.Column(db.String(255), nullable=True)
 
-# ------------------ Google OAuth Setup ---------------------
-#print(os.environ.get("GOOGLE_OAUTH_CLIENT_ID"))
-app.config["GOOGLE_OAUTH_CLIENT_ID"] = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
-#print(os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
-app.config["GOOGLE_OAUTH_CLIENT_SECRET"] = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
+# --------------------
+# Google OAuth
+# --------------------
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+GOOGLE_REDIRECT = os.getenv(
+    "GOOGLE_REDIRECT_URI",
+    f"http://localhost:{PORT}/login/google/authorized"
+)
 google_bp = make_google_blueprint(
-    scope=["profile", "email"],
-    redirect_to="google_login"
+    client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+    scope=[
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.email",
+    ],
+    redirect_url=GOOGLE_REDIRECT,
+    redirect_to="handle_google_login",
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
-# ------------------ Global Neural Model Loading ---------------------
-device = "cuda" if torch.cuda.is_available() else "cpu"
-# Load the pre-trained neural network model.
-# (Ensure that you have already trained the network and saved the weights to nets/value.pth.)
-neural_model = load_model("nets/value.pth", device=device)
-
-# ------------------ API Endpoints ---------------------
-@app.route("/")
-def index():
-    return "Welcome to Chess AI API"
-
-@app.route("/login/google")
-def google_login():
+@app.route("/login/google/success")
+def handle_google_login():
     if not google.authorized:
         return redirect(url_for("google.login"))
     resp = google.get("/oauth2/v2/userinfo")
-    if resp.ok:
-        user_info = resp.json()
-        email = user_info["email"]
-        name = user_info.get("name", email)
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            user = User(email=email, name=name)
-            db.session.add(user)
-            db.session.commit()
-        session["user_id"] = user.id
-        return redirect("http://localhost:3000/")
-    return "Failed to fetch user info", 400
+    if not resp.ok:
+        return "Failed to fetch user info", 400
+    info  = resp.json()
+    email = info["email"]
+    name  = info.get("name", email)
 
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        user = User(email=email, name=name)
+        db.session.add(user)
+        db.session.commit()
+
+    session["user_id"] = user.id
+    return redirect(os.getenv("FRONTEND_URL", "http://localhost:3000"))
+
+# --------------------
+# Auth Endpoints
+# --------------------
 @app.route("/api/register", methods=["POST"])
 def register():
-    data = request.get_json()
-    app.logger.info("Registration data: %s", data)
-    if not data:
-        return jsonify({"error": "No input data provided"}), 400
-
+    data  = request.get_json() or {}
     email = data.get("email")
-    password = data.get("password")
-    name = data.get("name", email)
-    if not email or not password:
+    pwd   = data.get("password")
+    name  = data.get("name", email)
+    if not email or not pwd:
         return jsonify({"error": "Email and password required"}), 400
-
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "User already exists"}), 400
 
-    try:
-        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
-        user = User(email=email, name=name, password=hashed_password)
-        db.session.add(user)
-        db.session.commit()
-        app.logger.info("User %s registered successfully.", email)
-        return jsonify({"message": "User registered successfully"})
-    except Exception as e:
-        app.logger.error("Registration error: %s", e)
-        return jsonify({"error": "Registration failed"}), 500
+    hashed = bcrypt.generate_password_hash(pwd).decode()
+    user   = User(email=email, name=name, password=hashed)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"message": "User registered successfully"})
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    app.logger.info("Login data: %s", data)
-    if not data:
-        return jsonify({"error": "No input data provided"}), 400
-
+    data  = request.get_json() or {}
     email = data.get("email")
-    password = data.get("password")
-    if not email or not password:
+    pwd   = data.get("password")
+    if not email or not pwd:
         return jsonify({"error": "Email and password required"}), 400
 
     user = User.query.filter_by(email=email).first()
-    if not user or not user.password:
-        return jsonify({"error": "User not found or password not set"}), 400
-
-    if bcrypt.check_password_hash(user.password, password):
-        session["user_id"] = user.id
-        app.logger.info("User %s logged in successfully.", email)
-        return jsonify({"message": "Logged in successfully"})
-    else:
+    if not user or not bcrypt.check_password_hash(user.password, pwd):
         return jsonify({"error": "Invalid credentials"}), 400
 
+    session["user_id"] = user.id
+    return jsonify({"message": "Logged in successfully"})
+
+@app.route("/api/me")
+def me():
+    uid = session.get("user_id")
+    if not uid:
+        return jsonify({"user": None})
+    user = User.query.get(uid)
+    return jsonify({"user": {"email": user.email, "name": user.name}})
+
+# --------------------
+# Load Neural Model
+# --------------------
+device       = "cuda" if torch.cuda.is_available() else "cpu"
+model_path   = os.getenv("NEURAL_MODEL_PATH", "nets/value.pth")
+neural_model = load_model(model_path, device=device)
+
+# --------------------
+# Chess Move Endpoint with timing
+# --------------------
 @app.route("/api/chess/move", methods=["POST"])
 def chess_move():
-    """
-    Expects JSON data:
-    {
-      "fen": "<FEN string>",
-      "depth": <int, optional>,  # for minimax search
-      "engine": "minimax" or "neural"
-    }
-    Returns the best move in UCI notation.
-    """
-    data = request.get_json()
-    fen = data.get("fen")
-    depth = data.get("depth", 3)
+    data   = request.get_json() or {}
+    fen    = data.get("fen")
+    depth  = data.get("depth", 3)
     engine = data.get("engine", "minimax")
-    
+
     try:
         board = chess.Board(fen)
-    except Exception as e:
+    except Exception:
         return jsonify({"error": "Invalid FEN"}), 400
 
-    if engine == "neural":
-        # Use the neural network to select a move via a one-ply search.
-        best_move = None
-        best_eval = None
-        # Determine which side is moving.
-        moving_side = board.turn  # True for White, False for Black
-        for move in board.legal_moves:
-            board.push(move)
-            # Serialize the board to a flat array and reshape to (1, 1, 8, 8).
-            board_array = serialize_board(board)
-            board_tensor = torch.tensor(board_array, dtype=torch.float32).view(1, 1, 8, 8).to(device)
+    start = time.time()
+    try:
+        if engine == "minimax":
+            best_move = find_best_move(board, depth)
+        else:
+            # Neural network path
+            moves  = list(board.legal_moves)
+            boards = []
+            for m in moves:
+                board.push(m)
+                boards.append(serialize_board(board))
+                board.pop()
+            arr    = np.stack(boards)
+            tensor = torch.tensor(arr, dtype=torch.float32).view(-1,1,8,8).to(device)
             with torch.no_grad():
-                value = neural_model(board_tensor).item()
-            board.pop()
-            # For White, we choose the move with the highest evaluation; for Black, the lowest.
-            if moving_side == chess.WHITE:
-                if best_eval is None or value > best_eval:
-                    best_eval = value
-                    best_move = move
-            else:
-                if best_eval is None or value < best_eval:
-                    best_eval = value
-                    best_move = move
-        move = best_move
-    else:
-        # Use the minimax with alpha–beta pruning search.
-        move = find_best_move(board, depth)
+                vals = neural_model(tensor).cpu().numpy().flatten()
+            idx        = vals.argmax() if board.turn else vals.argmin()
+            best_move  = moves[idx]
+    except Exception as e:
+        logger.error("Engine %s failed", engine, exc_info=e)
+        return jsonify({"error": f"{engine} failed"}), 500
 
-    if move:
-        return jsonify({"move": move.uci()})
-    else:
-        return jsonify({"move": None, "error": "No valid move found"})
+    elapsed = time.time() - start
+    logger.info(
+        "Engine=%s depth=%d fen=%s took %.2fs",
+        engine, depth, fen, elapsed
+    )
 
+    if best_move is None:
+        return jsonify({"error": "No valid move"}), 500
+
+    return jsonify({"move": best_move.uci()})
+
+# --------------------
+# Main
+# --------------------
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+
+    logger.info("Starting Chess AI backend on 127.0.0.1:%s", PORT)
+    app.run(
+        host="127.0.0.1",
+        port=PORT,
+        debug=False,
+        use_reloader=False,
+    )

@@ -11,6 +11,7 @@ function ChessBoardComponent() {
   const [fen, setFen] = useState(game.fen());
   const [bestMove, setBestMove] = useState("");
   const [depth, setDepth] = useState(3);
+  // Using "minimax" and "trained" in UI; we'll map "trained" to "neural" for backend
   const [engine, setEngine] = useState("minimax");
 
   // onPieceDrop validates moves and updates the game state.
@@ -25,14 +26,23 @@ function ChessBoardComponent() {
     return true;
   };
 
+  // Map the UI engine option to the backend expected value.
+  const getBackendEngine = () => {
+    if (engine === "trained") {
+      return "neural"; // Use neural network evaluation if "trained" is selected.
+    }
+    return engine; // Otherwise, use "minimax"
+  };
+
   const handleGetMove = async () => {
     try {
+      // Correct endpoint with only one slash after the domain
       const response = await axios.post(
-        "http://localhost:5000/api/chess/move",
+        "http://127.0.0.1:5000/api/chess/move",
         {
           fen: game.fen(),
           depth: depth,
-          engine: engine,
+          engine: getBackendEngine(),
         }
       );
       const move = response.data.move;
@@ -42,7 +52,7 @@ function ChessBoardComponent() {
         setFen(game.fen());
       }
     } catch (error) {
-      console.error(error);
+      console.error("Error fetching move:", error);
       setBestMove("Error calculating move");
     }
   };
@@ -83,7 +93,7 @@ function ChessBoardComponent() {
           type="number"
           variant="outlined"
           value={depth}
-          onChange={(e) => setDepth(parseInt(e.target.value))}
+          onChange={(e) => setDepth(parseInt(e.target.value, 10))}
           sx={{ width: "100px" }}
         />
         <TextField

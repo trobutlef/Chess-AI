@@ -12,6 +12,8 @@ venv/
 #data and processed files
 data/
 processed/
-
+value.pth
+.pytest_cache
+db.sqlite3
 
 
