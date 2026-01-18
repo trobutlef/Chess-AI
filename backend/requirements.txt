@@ -3,8 +3,14 @@ Flask-Dance==5.0.0
 Flask-Cors==3.0.10
 Flask-SQLAlchemy==2.5.1
 Flask-Bcrypt==1.0.1
+Flask-Migrate==3.1.0
+Flask-SocketIO==5.3.6
 python-chess==1.999
 SQLAlchemy<2.0
 torch
 numpy
 python-dotenv
+python-socketio==5.8.0
+eventlet==0.33.3
+pytest==7.4.0
+pytest-cov==4.1.0

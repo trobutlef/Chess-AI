@@ -25,18 +25,29 @@ import {
   CircularProgress,
   Alert,
   TextField,
+  Select,
+  MenuItem,
+  InputLabel,
+  Tabs,
+  Tab,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import ChessClock, { TIME_CONTROLS } from "./components/ChessClock";
+import GameHistory from "./components/GameHistory";
+import GameReview from "./components/GameReview";
 
 // Configure your API base URL in .env as REACT_APP_API_URL
 axios.defaults.baseURL =
-  process.env.REACT_APP_API_URL || "http://localhost:5001";
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 axios.defaults.withCredentials = true;
 
-export default function ChessGame({ user }) {
+export default function ChessGame({ user, onLogout }) {
+  // Game state
   const [fen, setFen] = useState(new Chess().fen());
   const [moveList, setMoveList] = useState([]);
   const [engine, setEngine] = useState("minimax");
-  const [depth, setDepth] = useState(2); // default lowered depth
+  const [depth, setDepth] = useState(3);
   const [userSide, setUserSide] = useState(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,10 +57,25 @@ export default function ChessGame({ user }) {
   const [loadingAI, setLoadingAI] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Time control state
+  const [timeControl, setTimeControl] = useState("blitz5"); // Key in TIME_CONTROLS
+  const [whiteTime, setWhiteTime] = useState(300000); // 5 min in ms
+  const [blackTime, setBlackTime] = useState(300000);
+  const [clockRunning, setClockRunning] = useState(false);
+
+  // Game persistence state
+  const [currentGameId, setCurrentGameId] = useState(null);
+  
+  // UI state
+  const [activeTab, setActiveTab] = useState(0); // 0 = Play, 1 = History
+  const [reviewGame, setReviewGame] = useState(null);
+
   const gameRef = useRef(new Chess());
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   // Update move history
-  const updateMoveList = (moveObj) => {
+  const updateMoveList = useCallback((moveObj) => {
     const san = moveObj.san;
     setMoveList((prev) => {
       const updated = [...prev];
@@ -60,18 +86,40 @@ export default function ChessGame({ user }) {
       }
       return updated;
     });
-  };
+  }, []);
+
+  // Save move to server
+  const saveMoveToServer = useCallback(async (san, result = null) => {
+    if (!currentGameId) return;
+    
+    try {
+      await axios.post(`/api/games/${currentGameId}/move`, {
+        move: san,
+        white_time: whiteTime,
+        black_time: blackTime,
+        result: result,
+      });
+    } catch (err) {
+      console.error("Failed to save move:", err);
+    }
+  }, [currentGameId, whiteTime, blackTime]);
 
   // Game over detection
-  const checkGameOver = () => {
+  const checkGameOver = useCallback(() => {
     const g = gameRef.current;
-    if (!g.isGameOver()) return;
+    if (!g.isGameOver()) return null;
+    
     let msg = "Game Over: ";
+    let result = "1/2-1/2";
+    
     if (g.isCheckmate()) {
-      msg +=
-        g.turn() === "w"
-          ? "Black wins by checkmate"
-          : "White wins by checkmate";
+      if (g.turn() === "w") {
+        msg += "Black wins by checkmate";
+        result = "0-1";
+      } else {
+        msg += "White wins by checkmate";
+        result = "1-0";
+      }
     } else if (g.isStalemate()) {
       msg += "Draw by stalemate";
     } else if (g.isInsufficientMaterial()) {
@@ -81,37 +129,57 @@ export default function ChessGame({ user }) {
     } else {
       msg += "Draw";
     }
+    
+    setClockRunning(false);
     setDialogMessage(msg);
     setDialogOpen(true);
-  };
+    
+    return result;
+  }, []);
 
-  // Ask AI for move, with console timing
+  // Handle timeout
+  const handleTimeout = useCallback((color) => {
+    const winner = color === "white" ? "Black" : "White";
+    const result = color === "white" ? "0-1" : "1-0";
+    
+    setClockRunning(false);
+    setDialogMessage(`Time's up! ${winner} wins on time.`);
+    setDialogOpen(true);
+    
+    if (currentGameId) {
+      saveMoveToServer(null, result);
+    }
+  }, [currentGameId, saveMoveToServer]);
+
+  // Ask AI for move
   const makeAIMove = useCallback(async () => {
     if (gameRef.current.isGameOver()) return;
 
     setLoadingAI(true);
     setErrorMsg("");
-    console.time("minimax");
 
     try {
       const resp = await axios.post("/api/chess/move", {
         fen: gameRef.current.fen(),
         engine,
-        depth, // use the state depth
+        depth,
+        use_book: true,
       });
-      console.timeEnd("minimax");
 
       const m = resp.data.move;
       if (m) {
         const aiMove = gameRef.current.move(m, { sloppy: true });
         if (aiMove) {
           updateMoveList(aiMove);
+          saveMoveToServer(aiMove.san);
           setFen(gameRef.current.fen());
-          checkGameOver();
+          const result = checkGameOver();
+          if (result) {
+            saveMoveToServer(null, result);
+          }
         }
       }
     } catch (err) {
-      console.timeEnd("minimax");
       console.error("AI move error:", err);
       setErrorMsg("Failed to get AI move");
     } finally {
@@ -131,18 +199,42 @@ export default function ChessGame({ user }) {
         });
         if (userMove) {
           updateMoveList(userMove);
+          saveMoveToServer(userMove.san);
           setFen(gameRef.current.fen());
-          checkGameOver();
-          await makeAIMove();
+          const result = checkGameOver();
+          if (result) {
+            saveMoveToServer(null, result);
+          } else {
+            makeAIMove();
+          }
         }
       } catch {
         // ignore illegal premove
       }
     }
-  }, [engine, depth, premoveQueue]);
+  }, [engine, depth, premoveQueue, updateMoveList, checkGameOver, saveMoveToServer]);
+
+  // Create game on server
+  const createGameOnServer = useCallback(async (side, selectedEngine, selectedDepth, selectedTimeControl) => {
+    try {
+      const tc = TIME_CONTROLS[selectedTimeControl];
+      const res = await axios.post("/api/games", {
+        engine: selectedEngine,
+        depth: selectedDepth,
+        user_color: side,
+        time_control: tc.time,
+        opponent_type: "ai",
+      });
+      setCurrentGameId(res.data.id);
+      return res.data;
+    } catch (err) {
+      console.error("Failed to create game:", err);
+      return null;
+    }
+  }, []);
 
   // Reset/start game
-  const resetGame = () => {
+  const resetGame = useCallback(async () => {
     const newGame = new Chess();
     gameRef.current = newGame;
     setFen(newGame.fen());
@@ -150,15 +242,36 @@ export default function ChessGame({ user }) {
     setDialogOpen(false);
     setPremoveFrom(null);
     setPremoveQueue([]);
-    if (userSide === "black") makeAIMove();
-  };
+    setErrorMsg("");
+    
+    // Set time based on time control
+    const tc = TIME_CONTROLS[timeControl];
+    if (tc.time) {
+      const timeMs = tc.time * 1000;
+      setWhiteTime(timeMs);
+      setBlackTime(timeMs);
+      setClockRunning(true);
+    } else {
+      setWhiteTime(null);
+      setBlackTime(null);
+      setClockRunning(false);
+    }
+  }, [timeControl]);
 
-  const handleSideSelection = (side) => {
+  const handleSideSelection = async (side) => {
     const chosen =
       side === "random" ? (Math.random() < 0.5 ? "white" : "black") : side;
     setUserSide(chosen);
+    
+    // Create game on server
+    await createGameOnServer(chosen, engine, depth, timeControl);
+    
     setGameStarted(true);
-    resetGame();
+    await resetGame();
+    
+    if (chosen === "black") {
+      makeAIMove();
+    }
   };
 
   // Handle drop on your turn
@@ -172,9 +285,14 @@ export default function ChessGame({ user }) {
       const move = g.move({ from, to, promotion: "q", sloppy: true });
       if (!move) return false;
       updateMoveList(move);
+      saveMoveToServer(move.san);
       setFen(g.fen());
-      checkGameOver();
-      makeAIMove();
+      const result = checkGameOver();
+      if (result) {
+        saveMoveToServer(null, result);
+      } else {
+        makeAIMove();
+      }
       return true;
     } catch {
       return false;
@@ -219,59 +337,54 @@ export default function ChessGame({ user }) {
     customStyles[premoveFrom] = { backgroundColor: "rgba(255,0,0,0.4)" };
   }
 
-  if (!gameStarted) {
+  // Handle time updates
+  const handleTimeUpdate = useCallback((wt, bt) => {
+    setWhiteTime(wt);
+    setBlackTime(bt);
+  }, []);
+
+  // Handle reviewing a game
+  const handleReviewGame = (game) => {
+    setReviewGame(game);
+  };
+
+  // If reviewing a game, show review component
+  if (reviewGame) {
     return (
-      <Box sx={{ p: 4, textAlign: "center" }}>
-        <Typography variant="h4">Choose Your Side</Typography>
-        <Stack
-          direction="row"
-          spacing={2}
-          justifyContent="center"
-          sx={{ mt: 2 }}
-        >
-          <Button onClick={() => handleSideSelection("white")}>White</Button>
-          <Button onClick={() => handleSideSelection("black")}>Black</Button>
-          <Button onClick={() => handleSideSelection("random")}>Random</Button>
-        </Stack>
-        <Typography sx={{ mt: 2 }}>Welcome, {user.name}!</Typography>
-      </Box>
+      <GameReview
+        game={reviewGame}
+        onClose={() => setReviewGame(null)}
+      />
     );
   }
 
-  return (
-    <>
-      {errorMsg && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {errorMsg}
-        </Alert>
-      )}
+  // Side selection screen
+  if (!gameStarted) {
+    return (
+      <Box sx={{ p: 4, textAlign: "center", maxWidth: 600, mx: "auto" }}>
+        <Typography variant="h4" sx={{ mb: 3 }}>
+          Chess AI
+        </Typography>
+        <Typography sx={{ mb: 2 }}>Welcome, {user.name}!</Typography>
 
-      <Box sx={{ display: "flex", gap: 4, p: 2 }}>
-        <Box>
-          <Typography variant="h5" align="center">
-            {engine === "neural" ? "Neural Network AI" : "Minimax AI"}
-          </Typography>
-          <Chessboard
-            position={fen}
-            boardWidth={400}
-            onPieceDrop={onPieceDrop}
-            onSquareClick={onSquareClick}
-            onSquareRightClick={onSquareRightClick}
-            customSquareStyles={customStyles}
-            boardOrientation={userSide}
-          />
-          <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 2 }}>
-            <TextField
-              label="Depth"
-              type="number"
-              variant="outlined"
-              value={depth}
-              onChange={(e) => setDepth(parseInt(e.target.value, 10) || 1)}
-              sx={{ width: 100 }}
-              inputProps={{ min: 1, max: 6 }}
-            />
-            <Button onClick={resetGame}>Reset</Button>
-            <FormControl component="fieldset">
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          centered
+          sx={{ mb: 3 }}
+        >
+          <Tab label="Play" />
+          <Tab label="Game History" />
+        </Tabs>
+
+        {activeTab === 0 ? (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Game Settings
+            </Typography>
+
+            {/* Engine selection */}
+            <FormControl component="fieldset" sx={{ mb: 2 }}>
               <FormLabel>Engine</FormLabel>
               <RadioGroup
                 row
@@ -286,14 +399,162 @@ export default function ChessGame({ user }) {
                 <FormControlLabel
                   value="neural"
                   control={<Radio />}
-                  label="Neural"
+                  label="Neural Network"
                 />
               </RadioGroup>
             </FormControl>
+
+            {/* Depth selector (only for minimax) */}
+            {engine === "minimax" && (
+              <Box sx={{ mb: 2 }}>
+                <TextField
+                  label="Search Depth"
+                  type="number"
+                  value={depth}
+                  onChange={(e) => setDepth(parseInt(e.target.value, 10) || 1)}
+                  inputProps={{ min: 1, max: 6 }}
+                  sx={{ width: 120 }}
+                  size="small"
+                />
+              </Box>
+            )}
+
+            {/* Time control selector */}
+            <FormControl sx={{ mb: 3, minWidth: 200 }}>
+              <InputLabel>Time Control</InputLabel>
+              <Select
+                value={timeControl}
+                onChange={(e) => setTimeControl(e.target.value)}
+                label="Time Control"
+                size="small"
+              >
+                {Object.entries(TIME_CONTROLS).map(([key, tc]) => (
+                  <MenuItem key={key} value={key}>
+                    {tc.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Choose Your Side
+            </Typography>
+            <Stack direction="row" spacing={2} justifyContent="center">
+              <Button
+                variant="contained"
+                onClick={() => handleSideSelection("white")}
+                sx={{ bgcolor: "#fff", color: "#000", "&:hover": { bgcolor: "#eee" } }}
+              >
+                White
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => handleSideSelection("black")}
+                sx={{ bgcolor: "#333", "&:hover": { bgcolor: "#444" } }}
+              >
+                Black
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => handleSideSelection("random")}
+              >
+                Random
+              </Button>
+            </Stack>
+          </Paper>
+        ) : (
+          <GameHistory onReviewGame={handleReviewGame} />
+        )}
+
+        <Button
+          onClick={onLogout}
+          sx={{ mt: 3 }}
+          color="inherit"
+        >
+          Logout
+        </Button>
+      </Box>
+    );
+  }
+
+  // Game screen
+  const boardWidth = isMobile ? Math.min(window.innerWidth - 32, 360) : 400;
+  const isWhiteTurn = gameRef.current.turn() === "w";
+
+  return (
+    <>
+      {errorMsg && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {errorMsg}
+        </Alert>
+      )}
+
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          gap: 2,
+          p: 2,
+          alignItems: isMobile ? "center" : "flex-start",
+        }}
+      >
+        {/* Chess clock - left side on desktop, top on mobile */}
+        {TIME_CONTROLS[timeControl].time && (
+          <Box sx={{ order: isMobile ? 0 : -1 }}>
+            <ChessClock
+              whiteTime={whiteTime}
+              blackTime={blackTime}
+              isWhiteTurn={isWhiteTurn}
+              isRunning={clockRunning && !dialogOpen}
+              onTimeUpdate={handleTimeUpdate}
+              onTimeout={handleTimeout}
+            />
+          </Box>
+        )}
+
+        {/* Board and controls */}
+        <Box>
+          <Typography variant="h6" align="center" sx={{ mb: 1 }}>
+            {engine === "neural" ? "Neural Network AI" : "Minimax AI"} (Depth: {depth})
+          </Typography>
+          <Chessboard
+            position={fen}
+            boardWidth={boardWidth}
+            onPieceDrop={onPieceDrop}
+            onSquareClick={onSquareClick}
+            onSquareRightClick={onSquareRightClick}
+            customSquareStyles={customStyles}
+            boardOrientation={userSide}
+          />
+          <Box
+            sx={{
+              mt: 2,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 1,
+              justifyContent: "center",
+            }}
+          >
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setGameStarted(false);
+                setCurrentGameId(null);
+              }}
+            >
+              New Game
+            </Button>
           </Box>
         </Box>
 
-        <Paper sx={{ width: 300, maxHeight: 400, overflow: "auto" }}>
+        {/* Move list */}
+        <Paper
+          sx={{
+            width: isMobile ? "100%" : 200,
+            maxHeight: 400,
+            overflow: "auto",
+          }}
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -315,6 +576,7 @@ export default function ChessGame({ user }) {
         </Paper>
       </Box>
 
+      {/* Game over dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
         <DialogTitle>Game Over</DialogTitle>
         <DialogContent>
@@ -324,7 +586,8 @@ export default function ChessGame({ user }) {
           <Button
             onClick={() => {
               setDialogOpen(false);
-              resetGame();
+              setGameStarted(false);
+              setCurrentGameId(null);
             }}
           >
             New Game
@@ -333,6 +596,7 @@ export default function ChessGame({ user }) {
         </DialogActions>
       </Dialog>
 
+      {/* Loading indicator */}
       {loadingAI && (
         <Box sx={{ position: "fixed", top: 16, right: 16 }}>
           <CircularProgress />

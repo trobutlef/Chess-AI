@@ -1,100 +1,128 @@
-# Chess AI Backend
+# Chess AI
 
-This repository implements a Chess AI backend with two engines:
-
-- **Minimax**: search-based engine with alpha-beta pruning and quiescence search.
-- **Neural**: evaluation using a trained convolutional neural network.
+A full-stack Chess AI application with two engines and a React frontend.
 
 ![Chess AI Screenshot](image.png)
+
+## Features
+
+- **Two AI Engines**:
+  - **Minimax**: Alpha-beta pruning with quiescence search and transposition tables
+  - **Neural Network**: CNN-based position evaluation using trained model
+- **Advanced Evaluation**: Piece-square tables, pawn structure, king safety, mobility
+- **Game History**: Save and review past games with PGN export
+- **Chess Clock**: Time controls (bullet, blitz, rapid, unlimited)
+- **Opening Book Support**: Polyglot format (optional)
+- **Multiplayer**: WebSocket-based online play (optional)
+- **Authentication**: Email/password and Google OAuth2
+- **Mobile Responsive**: Works on phones and tablets
 
 ## Repository Structure
 
 ```
 backend/
-  app.py                   Flask application and API endpoints
-  chess_engine.py          Minimax implementation and evaluation logic
-  neural_model.py          Neural network architecture and serialization utilities
-  generate_training_set.py PGN processing to dataset
-  train_model.py           Training script for neural network
-  data/                    Source PGN files (not tracked)
-  processed/               Processed datasets (not tracked)
-  nets/                    Trained model weights (not tracked)
-  requirements.txt         Python dependencies
+  app.py                   Flask API and game endpoints
+  chess_engine.py          Minimax with alpha-beta pruning
+  evaluation.py            Advanced positional evaluation
+  neural_model.py          CNN architecture
+  opening_book.py          Polyglot book support
+  multiplayer.py           WebSocket multiplayer
+  train_model.py           Neural network training
+  tests/                   pytest test suite
+
+frontend/
+  src/
+    App.js                 Main app with routing
+    ChessGame.js           Game component with clock integration
+    components/
+      ChessClock.js        Chess timer component
+      GameHistory.js       Past games list
+      GameReview.js        Step through games
+      Lobby.js             Multiplayer lobby
 ```
 
-## Setup
+## Quick Start
 
-1. Create and activate a virtual environment:
-   ```
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Configure environment variables in `.env`:
-   ```
-   FLASK_SECRET_KEY=<your secret>
-   GOOGLE_OAUTH_CLIENT_ID=<client id>
-   GOOGLE_OAUTH_CLIENT_SECRET=<client secret>
-   ```
-   Add `.env` to `.gitignore`.
+### Backend
 
-## Usage
-
-### Generating Dataset
-
-Place PGN files in `data/` and run:
-
-```
-python generate_training_set.py
-```
-
-Datasets will be saved in `processed/`.
-
-### Training Neural Model
-
-```
-python train_model.py
-```
-
-Model weights are written to `nets/value.pth`.
-
-### Running the API
-
-```
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python app.py
 ```
 
-The API will be available at `http://localhost:5001/`.
+API runs at `http://localhost:5001/`
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+App runs at `http://localhost:3000/`
+
+## Configuration
+
+Create `backend/.env`:
+
+```
+FLASK_SECRET_KEY=<your secret>
+GOOGLE_OAUTH_CLIENT_ID=<client id>
+GOOGLE_OAUTH_CLIENT_SECRET=<client secret>
+```
 
 ## API Endpoints
 
-### POST /api/chess/move
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chess/move` | POST | Get AI move for position |
+| `/api/games` | GET/POST | List/create games |
+| `/api/games/<id>` | GET/DELETE | Get/delete game |
+| `/api/games/<id>/move` | POST | Add move to game |
+| `/api/login` | POST | Email/password login |
+| `/api/register` | POST | Create account |
+| `/api/logout` | POST | End session |
+| `/api/me` | GET | Get current user |
 
-Request:
+### Chess Move Request
 
 ```json
 {
   "fen": "<FEN string>",
-  "depth": <search depth>,
-  "engine": "minimax" | "neural"
+  "depth": 3,
+  "engine": "minimax" | "neural",
+  "use_book": true
 }
 ```
 
-Response:
+## Training the Neural Network
 
-```json
-{ "move": "<uci string>" }
+1. Place PGN files in `backend/data/`
+2. Generate dataset:
+   ```bash
+   python generate_training_set.py
+   ```
+3. Train model:
+   ```bash
+   python train_model.py
+   ```
+
+Weights saved to `nets/value.pth`
+
+## Running Tests
+
+```bash
+cd backend
+pytest -v
 ```
-
-## Authentication
-
-Google OAuth2 is used for user login. Ensure the redirect URI in Google Console matches `GOOGLE_REDIRECT_URI` in `.env`.
 
 ## Notes
 
-- Minimax search depth impacts performance exponentially.
-- The neural engine offers consistent response time but depends on GPU availability.
-- For production, use Gunicorn or Docker and set `FLASK_ENV=production`.
+- Minimax depth 3-4 takes 2-10+ seconds per move
+- Neural network is faster but requires training
+- Opening book speeds up early game (download `.bin` file to `books/`)
+- For production: use Gunicorn and set `FLASK_ENV=production`

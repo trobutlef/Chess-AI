@@ -1,7 +1,8 @@
 import math
 import chess
+from evaluation import evaluate_board
 
-# Material values for evaluation and MVV-LVA
+# Material values for MVV-LVA move ordering
 VALUES = {
     chess.PAWN:   1,
     chess.KNIGHT: 3,
@@ -12,13 +13,6 @@ VALUES = {
 }
 
 _transposition_table = {}
-
-def evaluate_board(board):
-    score = 0
-    for piece in board.piece_map().values():
-        val = VALUES[piece.piece_type]
-        score += val if piece.color == chess.WHITE else -val
-    return score
 
 def mvv_lva(move, board):
     """MVV-LVA ordering, safe for en passant."""
